@@ -123,6 +123,30 @@ button{cursor:pointer}
 .toggle input:checked+span{background:var(--green)}
 .toggle input:checked+span:before{transform:translateX(18px)}
 
+/* SIZE/COLOR CHIP */
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:20px;background:#20242d;border:1px solid var(--border);font-size:11px;font-weight:700;margin:3px 3px 0 0}
+.chip.sm{font-size:10px;padding:3px 9px}
+.chip.size{background:#102c4a;color:#70aefc;border-color:#1e4b7a}
+.chip.color{background:#3b2c0e;color:#f7c75b;border-color:#6b4d16}
+.chip.user{background:#3b2c0e;color:#f7c75b;border-color:#6b4d16}
+.chip.admin{background:#37161b;color:#ff9ba3;border-color:#61242b}
+
+/* ORDER ITEM WITH IMAGE */
+.order-item-row{display:flex;gap:12px;align-items:flex-start;padding:12px;background:#0c0e13;border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
+.order-item-row img{width:56px;height:56px;border-radius:9px;object-fit:cover;background:#181b22;flex:none}
+.order-item-row .info{flex:1;min-width:0}
+.order-item-row .price{font-weight:800;white-space:nowrap}
+
+/* PRODUCT SIZE/COLOR PANEL */
+.psc-panel{background:#0c0e13;border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:14px}
+.psc-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.psc-title{font-size:13px;font-weight:800}
+.psc-hint{font-size:10px;color:var(--muted);line-height:1.6;margin-bottom:10px}
+.psc-list{display:flex;flex-direction:column;gap:7px}
+.psc-item{background:#101218;border:1px solid var(--border);border-radius:9px;padding:9px 11px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.psc-item-left{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0}
+.psc-empty{text-align:center;color:#5f6877;font-size:11px;padding:14px;border:1px dashed #232833;border-radius:9px}
+
 /* IMAGE UPLOADER */
 .uploader-area{border:2px dashed #303541;border-radius:12px;padding:24px 16px;text-align:center;cursor:pointer;transition:.15s;background:#0a0c11}
 .uploader-area:hover{border-color:var(--blue);background:#0d1018}
@@ -144,11 +168,16 @@ button{cursor:pointer}
 
 /* MODAL */
 .modal-bg{position:fixed;inset:0;z-index:1000;background:#000b;display:grid;place-items:center;padding:15px}
-.modal{width:min(640px,100%);max-height:90vh;overflow:auto;background:#11141b;border:1px solid #303541;border-radius:13px}
+.modal{width:min(720px,100%);max-height:90vh;overflow:auto;background:#11141b;border:1px solid #303541;border-radius:13px}
 .modal-head{padding:13px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center}
 .modal-head strong{font-size:14px}
 .modal-close{margin-left:auto;background:transparent;border:0;color:#aaa;font-size:21px}
 .modal-body{padding:15px}
+
+/* NOTIFICATION PREVIEW */
+.notif-preview{background:#0c0e13;border:1px solid var(--border);border-radius:9px;padding:11px 13px;font-size:12px;color:#c7ccd5;line-height:1.6}
+.notif-preview .by-admin{color:#ff9ba3;font-weight:700}
+.notif-preview .by-user{color:#f7c75b;font-weight:700}
 
 /* TOAST */
 .toast{position:fixed;z-index:2000;left:50%;bottom:22px;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#fff;color:#111;padding:10px 16px;border-radius:9px;font-size:11px;font-weight:800;transition:.2s}
@@ -261,10 +290,6 @@ const firebaseConfig = {
   measurementId: "G-8D17W0EPMC"
 };
 const ADMIN_UID = "EM3mwuD72UVTRJAHJHQHZiwNy6h1";
-
-/* ============================================================
-   IMGBB API KEY
-============================================================ */
 const IMGBB_API_KEY = "816eca5c8fdac2a9922b6384af9df61b";
 
 firebase.initializeApp(firebaseConfig);
@@ -278,8 +303,13 @@ let currentPage = "dashboard";
 let refs = [];
 let data = {
   products: [], orders: [], users: [],
-  payments: [], sliders: [], settings: {}, support: {}
+  payments: [], sliders: [],
+  settings: {}, support: {}
 };
+
+// Current product's sizes/colors (in-memory while editing)
+let pSizes  = [];
+let pColors = [];
 
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, x => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[x]));
@@ -423,7 +453,8 @@ function page(p){
   document.querySelectorAll(".nav button[data-page]").forEach(b => b.classList.toggle("active", b.dataset.page === p));
   $("sectionName").textContent = {
     dashboard: "Dashboard", users: "Users", products: "Products", orders: "Orders",
-    payments: "Payment Method", sliders: "Sliders", imageLink: "Image to Link",
+    payments: "Payment Method", sliders: "Sliders",
+    imageLink: "Image to Link",
     settings: "Settings", support: "Support Setting"
   }[p] || p;
   closeSidebar();
@@ -479,6 +510,7 @@ function renderDashboard(){
               <div style="text-align:right">
                 <b>${money(o.total)}</b>
                 <div><span class="pill">${esc(o.status || "Order Placed")}</span></div>
+                ${o.cancelledBy ? `<div><span class="pill ${o.cancelledBy === "admin" ? "red" : "amber"}" style="margin-top:4px;display:inline-block">${o.cancelledBy === "admin" ? "🛑 Admin" : "🙋 User"} cancelled</span></div>` : ""}
                 ${o.refundStatus === "pending" ? `<div><span class="pill amber" style="margin-top:4px;display:inline-block">💰 Refund Pending</span></div>` : ""}
               </div>
             </div>
@@ -513,16 +545,13 @@ function renderDashboard(){
       </div>
 
       <div class="card">
-        <div class="card-title">Payment Methods</div>
-        ${data.payments.length ? data.payments.slice(0, 6).map(p => `
-          <div class="method">
-            <div class="method-icon">📱</div>
-            <div class="method-info">
-              <div class="method-name">${esc(p.name)}</div>
-              <div class="muted">${esc(p.account || "")}</div>
-            </div>
-            <span class="pill ${p.enabled === false ? "red" : "green"}">${p.enabled === false ? "Disabled" : "Active"}</span>
-          </div>`).join("") : `<div class="empty">No payment methods.</div>`}
+        <div class="card-title">📊 Store Overview</div>
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div><div class="stat-label">Products</div><div style="font-size:20px;font-weight:900;margin-top:4px">${data.products.length}</div></div>
+          <div><div class="stat-label">Sliders</div><div style="font-size:20px;font-weight:900;margin-top:4px">${data.sliders.length}</div></div>
+          <div><div class="stat-label">Payments</div><div style="font-size:20px;font-weight:900;margin-top:4px">${data.payments.length}</div></div>
+          <div><div class="stat-label">Orders</div><div style="font-size:20px;font-weight:900;margin-top:4px">${data.orders.length}</div></div>
+        </div>
       </div>
     </div>`;
 }
@@ -572,9 +601,7 @@ function setupUploader(){
 
   area.addEventListener("click", () => input.click());
   input.addEventListener("change", (e) => {
-    if(e.target.files && e.target.files[0]){
-      handleFileUpload(e.target.files[0]);
-    }
+    if(e.target.files && e.target.files[0]) handleFileUpload(e.target.files[0]);
   });
 
   area.addEventListener("dragover", (e) => {
@@ -585,14 +612,11 @@ function setupUploader(){
   area.addEventListener("drop", (e) => {
     e.preventDefault();
     area.classList.remove("dragover");
-    if(e.dataTransfer.files && e.dataTransfer.files[0]){
-      handleFileUpload(e.dataTransfer.files[0]);
-    }
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]);
   });
 }
 
 function openUploaderPicker(){ $("uploaderInput").click(); }
-
 function clearUploader(){
   $("uploaderResult").innerHTML = "";
   $("uploaderInput").value = "";
@@ -600,19 +624,9 @@ function clearUploader(){
 
 async function handleFileUpload(file){
   if(!file) return;
-
-  if(!file.type.startsWith("image/")){
-    toast("Please select an image file");
-    return;
-  }
-  if(file.size > 32 * 1024 * 1024){
-    toast("File too large (max 32 MB)");
-    return;
-  }
-  if(!IMGBB_API_KEY || IMGBB_API_KEY === "YOUR_IMGBB_API_KEY_HERE"){
-    toast("ImgBB API key missing");
-    return;
-  }
+  if(!file.type.startsWith("image/")){ toast("Please select an image file"); return; }
+  if(file.size > 32 * 1024 * 1024){ toast("File too large (max 32 MB)"); return; }
+  if(!IMGBB_API_KEY || IMGBB_API_KEY === "YOUR_IMGBB_API_KEY_HERE"){ toast("ImgBB API key missing"); return; }
 
   let reader = new FileReader();
   reader.onload = (e) => {
@@ -647,9 +661,7 @@ async function handleFileUpload(file){
     });
     clearInterval(timer);
 
-    if(!res.ok){
-      throw new Error("Upload failed (HTTP " + res.status + ")");
-    }
+    if(!res.ok) throw new Error("Upload failed (HTTP " + res.status + ")");
     let json = await res.json();
     if(!json.success || !json.data || !json.data.url){
       throw new Error((json.error && json.error.message) || "Upload failed");
@@ -734,7 +746,7 @@ function sendToProductField(url){
 }
 
 /* ============================================================
-   PRODUCTS (5 images)
+   PRODUCTS
 ============================================================ */
 function render_products(){
   $("main").innerHTML = `
@@ -748,17 +760,42 @@ function render_products(){
         <div class="field"><label>Old Price</label><input id="pOld" type="number"></div>
       </div>
       <div class="grid">
-        <div class="field"><label>Image 1 URL * (Required)</label><input id="pImg1" placeholder="https://..."></div>
-        <div class="field"><label>Image 2 URL (Optional)</label><input id="pImg2" placeholder="https://..."></div>
-        <div class="field"><label>Image 3 URL (Optional)</label><input id="pImg3" placeholder="https://..."></div>
-        <div class="field"><label>Image 4 URL (Optional)</label><input id="pImg4" placeholder="https://..."></div>
-        <div class="field"><label>Image 5 URL (Optional)</label><input id="pImg5" placeholder="https://..."></div>
+        <div class="field"><label>Image 1 URL *</label><input id="pImg1" placeholder="https://..."></div>
+        <div class="field"><label>Image 2 URL</label><input id="pImg2" placeholder="https://..."></div>
+        <div class="field"><label>Image 3 URL</label><input id="pImg3" placeholder="https://..."></div>
+        <div class="field"><label>Image 4 URL</label><input id="pImg4" placeholder="https://..."></div>
+        <div class="field"><label>Image 5 URL</label><input id="pImg5" placeholder="https://..."></div>
         <div class="field"><label>Stock *</label><input id="pStock" type="number" value="0"></div>
         <div class="field"><label>Rating</label><input id="pRating" type="number" step=".1" value="5"></div>
         <div class="field"><label>Tag</label><input id="pTag" placeholder="NEW / SALE / HOT"></div>
       </div>
       <div class="field"><label>Description</label><textarea id="pDesc"></textarea></div>
-      <div class="actions">
+
+      <!-- PRODUCT SIZES -->
+      <div class="psc-panel">
+        <div class="psc-head">
+          <div class="psc-title">📏 Product Sizes</div>
+          <button class="btn green" type="button" onclick="addProductSize()">+ Add Product Size</button>
+        </div>
+        <div class="psc-hint">
+          Add unlimited sizes for this product (S, M, L, XL, 32, Free Size...).
+        </div>
+        <div id="pSizeList" class="psc-list"></div>
+      </div>
+
+      <!-- PRODUCT COLORS -->
+      <div class="psc-panel">
+        <div class="psc-head">
+          <div class="psc-title">🎨 Product Colors</div>
+          <button class="btn green" type="button" onclick="addProductColor()">+ Add Product Color</button>
+        </div>
+        <div class="psc-hint">
+          Add unlimited colors for this product (Red, Blue, Black...). Just enter color name.
+        </div>
+        <div id="pColorList" class="psc-list"></div>
+      </div>
+
+      <div class="actions" style="margin-top:14px">
         <button class="btn green" onclick="saveProduct()">Save Product</button>
         <button class="btn" onclick="clearProduct()">Clear</button>
         <button class="btn blue" onclick="page('imageLink')">📷 Upload New Image</button>
@@ -773,6 +810,11 @@ function render_products(){
       <div id="productList" class="list" style="margin-top:12px"></div>
     </div>`;
 
+  pSizes = [];
+  pColors = [];
+  renderProductSizeList();
+  renderProductColorList();
+
   let searchEl = $("pSearch");
   searchEl.value = window.productSearch || "";
   searchEl.addEventListener("input", e => {
@@ -783,6 +825,175 @@ function render_products(){
   filterProducts();
 }
 
+/* ============================================================
+   PRODUCT SIZE MANAGER (name only)
+============================================================ */
+function addProductSize(){
+  openModal("Add Product Size", `
+    <div class="field"><label>Size Name *</label>
+      <input id="newSizeName" placeholder="S / M / L / XL / 32 / Free Size" autofocus>
+    </div>
+    <div class="actions">
+      <button class="btn green" onclick="confirmAddProductSize()">Add Size</button>
+      <button class="btn" onclick="closeModal()">Cancel</button>
+    </div>`);
+  setTimeout(() => {
+    let el = $("newSizeName");
+    if(el) el.focus();
+    if(el) el.addEventListener("keydown", e => { if(e.key === "Enter") confirmAddProductSize(); });
+  }, 100);
+}
+
+function confirmAddProductSize(){
+  let name = ($("newSizeName").value || "").trim();
+  if(!name){ toast("Enter size name"); return; }
+  if(pSizes.find(s => s.name.toLowerCase() === name.toLowerCase())){
+    toast("This size already exists");
+    return;
+  }
+  pSizes.push({ name });
+  closeModal();
+  renderProductSizeList();
+  toast("Size added");
+}
+
+function renderProductSizeList(){
+  let box = $("pSizeList");
+  if(!box) return;
+  if(!pSizes.length){
+    box.innerHTML = `<div class="psc-empty">No sizes added yet. Click "+ Add Product Size".</div>`;
+    return;
+  }
+  box.innerHTML = pSizes.map((s, i) => `
+    <div class="psc-item">
+      <div class="psc-item-left">
+        <span class="chip size">📏 ${esc(s.name)}</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" type="button" onclick="editProductSize(${i})">Edit</button>
+        <button class="btn red" type="button" onclick="deleteProductSize(${i})">Delete</button>
+      </div>
+    </div>`).join("");
+}
+
+function editProductSize(i){
+  let s = pSizes[i]; if(!s) return;
+  openModal("Edit Product Size", `
+    <div class="field"><label>Size Name *</label>
+      <input id="editSizeName" value="${esc(s.name)}" autofocus>
+    </div>
+    <div class="actions">
+      <button class="btn green" onclick="confirmEditProductSize(${i})">Update</button>
+      <button class="btn" onclick="closeModal()">Cancel</button>
+    </div>`);
+}
+
+function confirmEditProductSize(i){
+  let name = ($("editSizeName").value || "").trim();
+  if(!name){ toast("Enter size name"); return; }
+  if(pSizes.find((x, idx) => idx !== i && x.name.toLowerCase() === name.toLowerCase())){
+    toast("This size already exists");
+    return;
+  }
+  pSizes[i].name = name;
+  closeModal();
+  renderProductSizeList();
+  toast("Size updated");
+}
+
+function deleteProductSize(i){
+  if(!confirm("Delete this size?")) return;
+  pSizes.splice(i, 1);
+  renderProductSizeList();
+  toast("Size removed");
+}
+
+/* ============================================================
+   PRODUCT COLOR MANAGER (name only — NO color picker)
+============================================================ */
+function addProductColor(){
+  openModal("Add Product Color", `
+    <div class="field"><label>Color Name *</label>
+      <input id="newColorName" placeholder="Red / Blue / Black / Green / White" autofocus>
+    </div>
+    <div class="actions">
+      <button class="btn green" onclick="confirmAddProductColor()">Add Color</button>
+      <button class="btn" onclick="closeModal()">Cancel</button>
+    </div>`);
+  setTimeout(() => {
+    let el = $("newColorName");
+    if(el) el.focus();
+    if(el) el.addEventListener("keydown", e => { if(e.key === "Enter") confirmAddProductColor(); });
+  }, 100);
+}
+
+function confirmAddProductColor(){
+  let name = ($("newColorName").value || "").trim();
+  if(!name){ toast("Enter color name"); return; }
+  if(pColors.find(c => c.name.toLowerCase() === name.toLowerCase())){
+    toast("This color already exists");
+    return;
+  }
+  pColors.push({ name });
+  closeModal();
+  renderProductColorList();
+  toast("Color added");
+}
+
+function renderProductColorList(){
+  let box = $("pColorList");
+  if(!box) return;
+  if(!pColors.length){
+    box.innerHTML = `<div class="psc-empty">No colors added yet. Click "+ Add Product Color".</div>`;
+    return;
+  }
+  box.innerHTML = pColors.map((c, i) => `
+    <div class="psc-item">
+      <div class="psc-item-left">
+        <span class="chip color">🎨 ${esc(c.name)}</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" type="button" onclick="editProductColor(${i})">Edit</button>
+        <button class="btn red" type="button" onclick="deleteProductColor(${i})">Delete</button>
+      </div>
+    </div>`).join("");
+}
+
+function editProductColor(i){
+  let c = pColors[i]; if(!c) return;
+  openModal("Edit Product Color", `
+    <div class="field"><label>Color Name *</label>
+      <input id="editColorName" value="${esc(c.name)}" autofocus>
+    </div>
+    <div class="actions">
+      <button class="btn green" onclick="confirmEditProductColor(${i})">Update</button>
+      <button class="btn" onclick="closeModal()">Cancel</button>
+    </div>`);
+}
+
+function confirmEditProductColor(i){
+  let name = ($("editColorName").value || "").trim();
+  if(!name){ toast("Enter color name"); return; }
+  if(pColors.find((x, idx) => idx !== i && x.name.toLowerCase() === name.toLowerCase())){
+    toast("This color already exists");
+    return;
+  }
+  pColors[i] = { name };
+  closeModal();
+  renderProductColorList();
+  toast("Color updated");
+}
+
+function deleteProductColor(i){
+  if(!confirm("Delete this color?")) return;
+  pColors.splice(i, 1);
+  renderProductColorList();
+  toast("Color removed");
+}
+
+/* ============================================================
+   PRODUCT LIST
+============================================================ */
 function filterProducts(){
   let q = (window.productSearch || "").toLowerCase();
   let a = data.products.filter(p =>
@@ -791,12 +1002,22 @@ function filterProducts(){
   $("productCount").textContent = a.length;
   $("productList").innerHTML = a.length ? a.map(p => {
     let imgCount = [p.image1, p.image2, p.image3, p.image4, p.image5].filter(Boolean).length;
+    let pS = (p.sizes  || []).map(s => typeof s === "string" ? s : s.name).filter(Boolean);
+    let pC = (p.colors || []).map(c => typeof c === "string" ? c : c.name).filter(Boolean);
     return `
       <div class="item product">
         <img src="${esc(p.image1 || "")}" onerror="this.style.visibility='hidden'">
-        <div>
+        <div style="min-width:0">
           <div class="product-name">${esc(p.name || "Unnamed")}</div>
           <div class="product-meta">${esc(p.category || "")} · ${money(p.price)} · Stock ${Number(p.stock || 0)} · ${imgCount} image${imgCount !== 1 ? "s" : ""}</div>
+          ${pS.length ? `<div style="margin-top:5px">
+            <span style="font-size:9px;color:#7f8796;text-transform:uppercase;letter-spacing:.5px">Sizes:</span>
+            ${pS.map(n => `<span class="chip size sm">${esc(n)}</span>`).join("")}
+          </div>` : ""}
+          ${pC.length ? `<div style="margin-top:3px">
+            <span style="font-size:9px;color:#7f8796;text-transform:uppercase;letter-spacing:.5px">Colors:</span>
+            ${pC.map(n => `<span class="chip color sm">${esc(n)}</span>`).join("")}
+          </div>` : ""}
         </div>
         <div class="product-actions">
           <button class="btn" onclick="editProduct('${p.id}')">Edit</button>
@@ -806,12 +1027,19 @@ function filterProducts(){
   }).join("") : `<div class="empty">No products found.</div>`;
 }
 
+/* ============================================================
+   CLEAR / EDIT / SAVE PRODUCT
+============================================================ */
 function clearProduct(){
   ["pEdit","pName","pCategory","pPrice","pOld","pImg1","pImg2","pImg3","pImg4","pImg5","pTag","pDesc"].forEach(x => {
     let el = $(x); if(el) el.value = "";
   });
   $("pStock").value = 0;
   $("pRating").value = 5;
+  pSizes = [];
+  pColors = [];
+  renderProductSizeList();
+  renderProductColorList();
 }
 
 function editProduct(id){
@@ -830,6 +1058,16 @@ function editProduct(id){
   $("pRating").value = p.rating || 5;
   $("pTag").value = p.tag || "";
   $("pDesc").value = p.description || "";
+
+  pSizes = (p.sizes || []).map(s =>
+    typeof s === "string" ? { name: s } : { name: s.name }
+  );
+  pColors = (p.colors || []).map(c =>
+    typeof c === "string" ? { name: c } : { name: c.name }
+  );
+  renderProductSizeList();
+  renderProductColorList();
+
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -852,6 +1090,8 @@ async function saveProduct(){
     rating: Number($("pRating").value || 0),
     tag: $("pTag").value.trim(),
     description: $("pDesc").value.trim(),
+    sizes:  pSizes.map(s => ({ name: s.name })),
+    colors: pColors.map(c => ({ name: c.name })),
     updatedAt: Date.now()
   };
   if(!d.name) return toast("Product name is required");
@@ -863,7 +1103,7 @@ async function saveProduct(){
     if(!id) d.createdAt = Date.now();
     await r.set(d);
     clearProduct();
-    toast("Product saved");
+    toast("Product saved — " + d.sizes.length + " size(s), " + d.colors.length + " color(s)");
   } catch(e){ toast(e.message); }
 }
 
@@ -910,6 +1150,7 @@ function render_orders(){
                   <td>${esc(o.paymentMethod || "—")}</td>
                   <td>
                     <span class="pill">${esc(o.status || "Order Placed")}</span>
+                    ${o.cancelledBy ? `<div><span class="pill ${o.cancelledBy === "admin" ? "red" : "amber"}" style="margin-top:4px;display:inline-block">${o.cancelledBy === "admin" ? "🛑 Admin cancelled" : "🙋 User cancelled"}</span></div>` : ""}
                     ${o.refundStatus === "pending" ? `<div><span class="pill amber" style="margin-top:4px;display:inline-block">💰 Refund Pending</span></div>` : ""}
                     ${o.refundStatus === "refunded" ? `<div><span class="pill green" style="margin-top:4px;display:inline-block">✓ Refunded</span></div>` : ""}
                   </td>
@@ -942,6 +1183,18 @@ function viewOrder(id){
   }
   let due = Math.max(0, total - paid);
 
+  // Notification preview
+  let notifPreview = "—";
+  if(o.status === "Cancelled" && o.cancelledBy){
+    if(o.cancelledBy === "admin"){
+      notifPreview = `<span class="by-admin">🛑 Order cancelled by Admin</span>`;
+    } else {
+      notifPreview = `<span class="by-user">🙋 Order cancelled by ${esc(o.cancelledByName || "Customer")}</span>`;
+    }
+  } else if(o.notification){
+    notifPreview = esc(o.notification);
+  }
+
   openModal("Order Details", `
     <div class="grid">
       <div class="field"><label>Order ID</label><input value="#${esc(o.orderNo || o.id)}" readonly></div>
@@ -949,6 +1202,12 @@ function viewOrder(id){
       <div class="field"><label>Phone</label><input value="${esc(o.phone || "")}" readonly></div>
       <div class="field"><label>Email</label><input value="${esc(o.email || "")}" readonly></div>
       ${o.cancelledAt ? `<div class="field"><label>Cancelled At</label><input value="${date(o.cancelledAt)}" readonly></div>` : ""}
+      ${o.cancelledBy ? `
+        <div class="field">
+          <label>Cancelled By</label>
+          <input value="${o.cancelledBy === "admin" ? "Admin" : esc(o.cancelledByName || "User")}"
+                 readonly style="color:${o.cancelledBy === "admin" ? "#ff9ba3" : "#f7c75b"}">
+        </div>` : ""}
     </div>
     <div class="field"><label>Address</label><textarea readonly>${esc(o.address || "")}</textarea></div>
 
@@ -983,17 +1242,32 @@ function viewOrder(id){
           `<option ${o.status === x ? "selected" : ""}>${x}</option>`).join("")}
       </select>
     </div>
-    <div class="field"><label>Notification</label><textarea id="orderNote">${esc(o.notification || "")}</textarea></div>
 
-    <div class="card" style="margin:0">
-      <div class="card-title">Items</div>
+    <div class="field">
+      <label>Notification</label>
+      <textarea id="orderNote">${esc(o.notification || "")}</textarea>
+    </div>
+
+    <div class="field">
+      <label>Notification Preview</label>
+      <div class="notif-preview">${notifPreview}</div>
+    </div>
+
+    <div class="card" style="margin:12px 0 0">
+      <div class="card-title">🛍️ Items (${(o.items || []).length})</div>
       ${(o.items || []).map(i => `
-        <div class="item" style="margin-bottom:7px">
-          <div class="item-head">
-            <span class="item-title">${esc(i.name || "Product")}</span>
-            <span>${money(Number(i.price || 0) * Number(i.qty || 1))}</span>
+        <div class="order-item-row">
+          <img src="${esc(i.image || i.image1 || "")}" onerror="this.style.visibility='hidden'">
+          <div class="info">
+            <div class="item-title">${esc(i.name || "Product")}</div>
+            <div class="muted">Qty: ${Number(i.qty || 1)} · Unit: ${money(i.price)}</div>
+            ${(i.size || i.color) ? `
+              <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+                ${i.size  ? `<span class="chip size">📏 Size: ${esc(i.size)}</span>`  : ""}
+                ${i.color ? `<span class="chip color">🎨 Color: ${esc(i.color)}</span>` : ""}
+              </div>` : `<div class="muted" style="margin-top:6px;color:#5d6675">No variant selected</div>`}
           </div>
-          <div class="muted">Qty: ${Number(i.qty || 1)} · Unit: ${money(i.price)}</div>
+          <div class="price">${money(Number(i.price || 0) * Number(i.qty || 1))}</div>
         </div>`).join("") || `<div class="empty">No item information.</div>`}
     </div>
 
@@ -1021,7 +1295,12 @@ function viewOrder(id){
 
 async function updateOrder(id){
   try {
+    let o = data.orders.find(x => x.id === id);
+    if(!o){ toast("Order not found"); return; }
+
     let newStatus = $("orderStatus").value;
+    let oldStatus = o.status;
+
     let update = {
       status: newStatus,
       notification: $("orderNote").value.trim(),
@@ -1031,9 +1310,24 @@ async function updateOrder(id){
       update.paymentStatus = $("paymentStatus").value;
     }
 
-    if(newStatus === "Cancelled"){
-      let snap = await db.ref("orders/" + id + "/cancelledAt").once("value");
-      if(!snap.exists()){ update.cancelledAt = Date.now(); }
+    // Admin cancelled the order
+    if(newStatus === "Cancelled" && oldStatus !== "Cancelled"){
+      update.cancelledAt = Date.now();
+      update.cancelledBy = "admin";
+      update.cancelledByName = "Admin";
+      update.notification = "This order has been cancelled by Admin.";
+
+      let walletUsed = Number(o.walletUsed || o.balanceUsed || 0);
+      let refundAmount = 0;
+      if(walletUsed > 0) refundAmount += walletUsed;
+      if(o.paymentStatus === "verified" && o.paymentMethod !== "Cash on Delivery"){
+        refundAmount += Number(o.paymentAmount || 0);
+      }
+      if(refundAmount > 0){
+        update.refundStatus = "pending";
+        update.refundAmount = refundAmount;
+        update.notification = "Order cancelled by Admin. Refund of " + money(refundAmount) + " is pending.";
+      }
     }
 
     await db.ref("orders/" + id).update(update);
@@ -1052,41 +1346,26 @@ async function deleteOrder(id){
 }
 
 async function processRefund(orderId, userId, amount){
-  if(!userId || userId === "guest"){
-    toast("Cannot refund — guest user");
-    return;
-  }
-  if(!amount || amount <= 0){
-    toast("Invalid refund amount");
-    return;
-  }
+  if(!userId || userId === "guest"){ toast("Cannot refund — guest user"); return; }
+  if(!amount || amount <= 0){ toast("Invalid refund amount"); return; }
   if(!confirm("Add " + money(amount) + " to user's wallet balance?")) return;
 
   try {
     let snap = await db.ref("users/" + userId).once("value");
     let user = snap.val();
     if(!user){ toast("User not found"); return; }
-
     let currentBalance = Number(user.balance || 0);
     let newBalance = currentBalance + Number(amount);
-
-    await db.ref("users/" + userId).update({
-      balance: newBalance,
-      updatedAt: Date.now()
-    });
-
+    await db.ref("users/" + userId).update({ balance: newBalance, updatedAt: Date.now() });
     await db.ref("orders/" + orderId).update({
       refundStatus: "refunded",
       refundedAt: Date.now(),
       notification: "Refund of " + money(amount) + " has been added to your wallet balance.",
       updatedAt: Date.now()
     });
-
     toast("Refund processed — " + money(amount) + " added to wallet");
     closeModal();
-  } catch(e){
-    toast(e.message);
-  }
+  } catch(e){ toast(e.message); }
 }
 
 /* ============================================================
@@ -1132,7 +1411,6 @@ function render_users(){
 
 function viewUser(id){
   let u = data.users.find(x => x.id === id); if(!u) return;
-
   let addrList = (u.addresses || []).map(a =>
     typeof a === "string" ? a : (a.formatted || "")
   ).filter(Boolean);
@@ -1196,7 +1474,7 @@ async function deleteUser(id){
 }
 
 /* ============================================================
-   PAYMENTS (Mobile Wallet only)
+   PAYMENTS
 ============================================================ */
 function render_payments(){
   let filtered = data.payments.filter(p => (p.category || "mobile") === "mobile");
@@ -1222,11 +1500,7 @@ function render_payments(){
             </label>
             <button class="btn" onclick="editPayment('${p.id}')">Edit</button>
             <button class="btn red" onclick="deletePayment('${p.id}')">Delete</button>
-          </div>`).join("") : `<div class="empty">No mobile wallet methods yet. Add one like bKash, Nagad, Rocket.</div>`}
-      </div>
-
-      <div class="muted" style="margin-top:14px;font-size:10px;line-height:1.7">
-        Only <strong>Mobile Wallet</strong> payment methods are supported. Examples: bKash, Nagad, Rocket, Upay.
+          </div>`).join("") : `<div class="empty">No mobile wallet methods yet.</div>`}
       </div>
     </div>`;
 }
@@ -1348,7 +1622,7 @@ function render_settings(){
     <div class="card">
       <div class="card-title">Store Settings</div>
       <div class="grid">
-        <div class="field"><label>Store Name</label><input id="setName" value="${esc(s.storeName || "ZAHID MART")}"></div>
+        <div class="field"><label>Store Name</label><input id="setName" value="${esc(s.storeName || "Jahid Shop BD")}"></div>
         <div class="field"><label>Phone</label><input id="setPhone" value="${esc(s.phone || "")}"></div>
         <div class="field"><label>Email</label><input id="setEmail" value="${esc(s.email || "")}"></div>
         <div class="field"><label>Currency</label><input id="setCurrency" value="${esc(s.currency || "৳")}"></div>
@@ -1440,7 +1714,7 @@ async function exportData(){
     let url = URL.createObjectURL(blob);
     let a = document.createElement("a");
     a.href = url;
-    a.download = "zahidmart-backup-" + Date.now() + ".json";
+    a.download = "jahidshop-backup-" + Date.now() + ".json";
     a.click();
     URL.revokeObjectURL(url);
     toast("Backup exported");
